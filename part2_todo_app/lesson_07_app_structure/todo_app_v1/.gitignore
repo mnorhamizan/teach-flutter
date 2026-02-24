@@ -5,9 +5,11 @@
 *.swp
 .DS_Store
 .atom/
+.build/
 .buildlog/
 .history
 .svn/
+.swiftpm/
 migrate_working_dir/
 
 # IntelliJ related
@@ -41,3 +43,31 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Android related
+/android/.gradle/
+/android/local.properties
+/android/app/build/
+
+# iOS related
+/ios/Pods/
+/ios/.symlinks/
+
+# FVM (Flutter Version Management)
+.fvm/
+
+# Environment and secrets
+.env
+*.jks
+key.properties
+
+# Coverage
+coverage/
+
+# VS Code
+.vscode/
+
+# Generated files
+*.g.dart
+*.freezed.dart
+*.mocks.dart
