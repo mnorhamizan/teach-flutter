@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/todo.dart';
 import '../services/api_service.dart';
 import '../widgets/todo_item.dart';
+import 'ai_screen.dart';
 import 'todo_form_screen.dart';
 
 /// The main screen that displays and manages the list of todos.
@@ -51,6 +52,18 @@ class _TodoListScreenState extends State<TodoListScreen> {
           SnackBar(content: Text('Failed to load todos: $e')),
         );
       }
+    }
+  }
+
+  /// Opens the AI assistant screen.
+  void _openAiScreen() async {
+    final shouldReload = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(builder: (context) => const AiScreen()),
+    );
+
+    if (shouldReload == true) {
+      _loadTodos();
     }
   }
 
@@ -209,6 +222,11 @@ class _TodoListScreenState extends State<TodoListScreen> {
         title: const Text('My Todos'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.auto_awesome),
+            tooltip: 'AI Assistant',
+            onPressed: _openAiScreen,
+          ),
           if (!_isLoading && _todos.isNotEmpty)
             Center(
               child: Padding(

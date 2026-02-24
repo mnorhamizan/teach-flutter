@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../models/ai_response.dart';
 import '../models/todo.dart';
 
 /// Exception thrown when an API call fails.
@@ -84,6 +85,21 @@ class ApiService {
 
     if (response.statusCode != 204) {
       throw ApiException('Failed to delete todo', statusCode: response.statusCode);
+    }
+  }
+
+  /// POST /todos/ai — Send a natural language query to the AI endpoint.
+  Future<AiResponse> aiQuery(String query) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/todos/ai'),
+      headers: _headers,
+      body: jsonEncode({'query': query}),
+    );
+
+    if (response.statusCode == 200) {
+      return AiResponse.fromJson(jsonDecode(response.body));
+    } else {
+      throw ApiException('AI request failed', statusCode: response.statusCode);
     }
   }
 }
