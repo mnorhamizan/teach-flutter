@@ -1,15 +1,13 @@
 import 'package:flutter/material.dart';
 import '../models/todo.dart';
-import '../services/storage_service.dart';
+import '../services/api_service.dart';
 import '../widgets/todo_item.dart';
 import 'todo_form_screen.dart';
 
 /// The main screen that displays and manages the list of todos.
 ///
-/// This final version adds:
-/// - Loading todos from storage on startup
-/// - Saving todos to storage on every change
-/// - Loading indicator while data loads
+/// This version uses ApiService to communicate with the FastAPI backend
+/// instead of local SharedPreferences storage.
 class TodoListScreen extends StatefulWidget {
   const TodoListScreen({super.key});
 
@@ -21,8 +19,8 @@ class _TodoListScreenState extends State<TodoListScreen> {
   /// The list of todos - this is the app's state.
   final List<Todo> _todos = [];
 
-  /// Storage service for persistence.
-  final StorageService _storage = StorageService();
+  /// API service for backend communication.
+  final ApiService _api = ApiService();
 
   /// Whether the app is loading data.
   bool _isLoading = true;
@@ -33,12 +31,13 @@ class _TodoListScreenState extends State<TodoListScreen> {
     _loadTodos();
   }
 
-  /// Loads todos from storage.
+  /// Loads todos from the API.
   Future<void> _loadTodos() async {
     try {
-      final todos = await _storage.loadTodos();
+      final todos = await _api.fetchTodos();
       if (mounted) {
         setState(() {
+          _todos.clear();
           _todos.addAll(todos);
           _isLoading = false;
         });
@@ -49,20 +48,7 @@ class _TodoListScreenState extends State<TodoListScreen> {
           _isLoading = false;
         });
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to load todos')),
-        );
-      }
-    }
-  }
-
-  /// Saves todos to storage.
-  Future<void> _saveTodos() async {
-    try {
-      await _storage.saveTodos(_todos);
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to save')),
+          SnackBar(content: Text('Failed to load todos: $e')),
         );
       }
     }
@@ -78,18 +64,26 @@ class _TodoListScreenState extends State<TodoListScreen> {
     );
 
     if (newTodo != null) {
-      setState(() {
-        _todos.add(newTodo);
-      });
-      _saveTodos();
+      try {
+        final created = await _api.createTodo(newTodo);
+        setState(() {
+          _todos.add(created);
+        });
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Todo added!'),
-            duration: Duration(seconds: 1),
-          ),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Todo added!'),
+              duration: Duration(seconds: 1),
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to add todo: $e')),
+          );
+        }
       }
     }
   }
@@ -104,36 +98,54 @@ class _TodoListScreenState extends State<TodoListScreen> {
     );
 
     if (updatedTodo != null) {
+      try {
+        final saved = await _api.updateTodo(updatedTodo);
+        setState(() {
+          final index = _todos.indexWhere((t) => t.id == saved.id);
+          if (index != -1) {
+            _todos[index] = saved;
+          }
+        });
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Todo updated!'),
+              duration: Duration(seconds: 1),
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to update todo: $e')),
+          );
+        }
+      }
+    }
+  }
+
+  /// Toggles the completion status of a todo via the API.
+  void _toggleTodo(int id) async {
+    try {
+      final toggled = await _api.toggleTodo(id);
       setState(() {
-        final index = _todos.indexWhere((t) => t.id == updatedTodo.id);
+        final index = _todos.indexWhere((t) => t.id == id);
         if (index != -1) {
-          _todos[index] = updatedTodo;
+          _todos[index] = toggled;
         }
       });
-      _saveTodos();
-
+    } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Todo updated!'),
-            duration: Duration(seconds: 1),
-          ),
+          SnackBar(content: Text('Failed to toggle todo: $e')),
         );
       }
     }
   }
 
-  /// Toggles the completion status of a todo.
-  void _toggleTodo(String id) {
-    setState(() {
-      final todo = _todos.firstWhere((t) => t.id == id);
-      todo.toggleComplete();
-    });
-    _saveTodos();
-  }
-
   /// Deletes a todo with confirmation dialog.
-  void _deleteTodo(String id) {
+  void _deleteTodo(int id) {
     final todo = _todos.firstWhere((t) => t.id == id);
 
     showDialog(
@@ -152,33 +164,39 @@ class _TodoListScreenState extends State<TodoListScreen> {
               foregroundColor: Colors.white,
             ),
             onPressed: () {
-              setState(() {
-                _todos.removeWhere((t) => t.id == id);
-              });
-              _saveTodos();
               Navigator.pop(context);
-
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('"${todo.title}" deleted'),
-                  duration: const Duration(seconds: 2),
-                  action: SnackBarAction(
-                    label: 'Undo',
-                    onPressed: () {
-                      setState(() {
-                        _todos.add(todo);
-                      });
-                      _saveTodos();
-                    },
-                  ),
-                ),
-              );
+              _performDelete(id, todo.title);
             },
             child: const Text('Delete'),
           ),
         ],
       ),
     );
+  }
+
+  /// Performs the actual API delete after the dialog is dismissed.
+  Future<void> _performDelete(int id, String title) async {
+    try {
+      await _api.deleteTodo(id);
+      setState(() {
+        _todos.removeWhere((t) => t.id == id);
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('"$title" deleted'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to delete todo: $e')),
+        );
+      }
+    }
   }
 
   /// Returns the count of incomplete todos.
@@ -252,8 +270,8 @@ class _TodoListScreenState extends State<TodoListScreen> {
         final todo = _todos[index];
         return TodoItem(
           todo: todo,
-          onToggle: () => _toggleTodo(todo.id),
-          onDelete: () => _deleteTodo(todo.id),
+          onToggle: () => _toggleTodo(todo.id!),
+          onDelete: () => _deleteTodo(todo.id!),
           onTap: () => _editTodo(todo),
         );
       },

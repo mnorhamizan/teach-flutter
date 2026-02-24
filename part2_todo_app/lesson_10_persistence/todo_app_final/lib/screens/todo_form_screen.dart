@@ -70,13 +70,14 @@ class _TodoFormScreenState extends State<TodoFormScreen> {
   void _submitForm() {
     if (_formKey.currentState!.validate()) {
       final todo = Todo(
-        id: widget.existingTodo?.id ?? generateId(),
+        id: widget.existingTodo?.id,
         title: _titleController.text.trim(),
         description: _descriptionController.text.trim().isEmpty
             ? null
             : _descriptionController.text.trim(),
         isCompleted: widget.existingTodo?.isCompleted ?? false,
         createdAt: widget.existingTodo?.createdAt,
+        updatedAt: widget.existingTodo?.updatedAt,
         priority: _priority,
       );
       Navigator.pop(context, todo);
